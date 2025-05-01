@@ -1,0 +1,6 @@
+{
+  "use_mongodb": true,
+  "connection_string": "mongodb://localhost:27017",
+  "db_name": "KnowledgeBase",
+  "repository_file": "/home/dtp2025-001/Pictures/corpus/uploads/uploads/repository_generated.txt"
+}

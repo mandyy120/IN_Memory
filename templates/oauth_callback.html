@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Callback</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 30px;
+            text-align: left;
+        }
+        h1, h2 {
+            color: #4CAF50;
+            text-align: center;
+        }
+        p {
+            line-height: 1.6;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .info {
+            color: #2196F3;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .instructions {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        ol {
+            margin-left: 20px;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Drive Authorization</h1>
+        <div id="status">Processing authorization...</div>
+
+        <div id="errorHelp" style="display: none;" class="instructions">
+            <h2>How to Fix OAuth Client Error</h2>
+            <p>If you're seeing an "OAuth client not found" error, follow these steps to set up your Google OAuth client:</p>
+            <ol>
+                <li>Go to the <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></li>
+                <li>Create a new project or select an existing one</li>
+                <li>Go to "APIs & Services" > "Credentials"</li>
+                <li>Click "Create Credentials" > "OAuth client ID"</li>
+                <li>Select "Web application" as the application type</li>
+                <li>Add a name for your OAuth client</li>
+                <li>Under "Authorized JavaScript origins", add: <pre id="jsOrigin"></pre></li>
+                <li>Under "Authorized redirect URIs", add: <pre id="redirectUri"></pre></li>
+                <li>Click "Create" and note your Client ID</li>
+                <li>Go back to the data input page and click "Authorize with Google" again</li>
+                <li>Enter your Client ID when prompted</li>
+            </ol>
+        </div>
+
+        <button id="closeButton" style="display: none;">Close Window</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const statusElement = document.getElementById('status');
+            const closeButton = document.getElementById('closeButton');
+            const errorHelp = document.getElementById('errorHelp');
+            const jsOrigin = document.getElementById('jsOrigin');
+            const redirectUri = document.getElementById('redirectUri');
+
+            // Set the origins and redirect URIs
+            jsOrigin.textContent = window.location.origin;
+            redirectUri.textContent = window.location.origin + '/oauth2callback';
+
+            // Check if we have a token in the URL hash
+            if (window.location.hash) {
+                const params = new URLSearchParams(window.location.hash.substring(1));
+                const accessToken = params.get('access_token');
+
+                if (accessToken) {
+                    // Create a credential object
+                    const credentials = {
+                        access_token: accessToken,
+                        token_type: params.get('token_type'),
+                        expires_in: params.get('expires_in')
+                    };
+
+                    // Send the credentials to the opener window
+                    if (window.opener && !window.opener.closed) {
+                        try {
+                            window.opener.postMessage({
+                                type: 'oauth-callback',
+                                credentials: credentials
+                            }, window.location.origin);
+
+                            statusElement.innerHTML = '<p class="success">Authorization successful! You can close this window.</p>';
+                        } catch (error) {
+                            statusElement.innerHTML = '<p class="error">Error sending credentials to main window. Please copy the following credentials and paste them manually:</p>' +
+                                '<pre>' + JSON.stringify(credentials, null, 2) + '</pre>';
+                        }
+                    } else {
+                        statusElement.innerHTML = '<p class="error">Main window not found. Please copy the following credentials and paste them manually:</p>' +
+                            '<pre>' + JSON.stringify(credentials, null, 2) + '</pre>';
+                    }
+                } else {
+                    statusElement.innerHTML = '<p class="error">No access token found in the response.</p>';
+                    errorHelp.style.display = 'block';
+                }
+            } else if (window.location.search && window.location.search.includes('error=')) {
+                // Handle error in the query parameters
+                const params = new URLSearchParams(window.location.search);
+                const error = params.get('error');
+
+                statusElement.innerHTML = `<p class="error">Authorization error: ${error}</p>`;
+                errorHelp.style.display = 'block';
+            } else {
+                statusElement.innerHTML = '<p class="info">This is the OAuth callback page. You should be redirected automatically after authorization.</p>';
+            }
+
+            // Show close button
+            closeButton.style.display = 'inline-block';
+
+            // Add event listener to close button
+            closeButton.addEventListener('click', function() {
+                window.close();
+            });
+        });
+    </script>
+</body>
+</html>

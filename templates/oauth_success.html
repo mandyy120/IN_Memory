@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Success</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 50px;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        p {
+            line-height: 1.6;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Drive Authorization</h1>
+        <p class="success">Authorization successful!</p>
+        <p>Your Google Drive account has been successfully connected.</p>
+        <p>You can now close this window and return to the application.</p>
+        <button onclick="window.close()">Close Window</button>
+    </div>
+
+    <script>
+        // Notify the opener window that authorization was successful
+        if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ type: 'oauth-success' }, window.location.origin);
+
+            // Redirect the opener window to the data-input page
+            window.opener.location.href = '/data-input';
+
+            // Close this window after a short delay
+            setTimeout(function() {
+                window.close();
+            }, 1000);
+        } else {
+            // If no opener window, redirect this window
+            window.location.href = '/data-input';
+        }
+    </script>
+</body>
+</html>

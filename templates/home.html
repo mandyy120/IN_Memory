@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datopic In Memory Chatbot - Query System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .query-box {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            overflow: auto;
+            max-height: 400px;
+            border: 1px solid #eee;
+        }
+        .result-section pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            margin: 0;
+            background-color: #fff;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+        .result-section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .loading {
+            display: none;
+            color: #666;
+            margin: 10px 0;
+        }
+        .nav-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .nav-bar a {
+            padding: 8px 16px;
+            background-color: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .nav-bar a:hover {
+            background-color: #0b7dda;
+        }
+
+        @media (max-width: 600px) {
+            input[type="text"] {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+            button {
+                width: 100%;
+            }
+            .result-section {
+                max-height: 300px;
+            }
+            .container {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Datopic In Memory Chatbot(English)</h1>
+
+        <div class="nav-bar">
+            <h2>Query System</h2>
+            <a href="/data-input">Data Input</a>
+        </div>
+
+        <div class="query-box">
+            <h3>Ask the Knowledge Base</h3>
+            <input type="text" id="queryInput" placeholder="Enter your query...">
+            <button onclick="submitQuery()">Search</button>
+            <div class="loading" id="loading">Processing...</div>
+            <div style="margin-top: 10px;">
+                <label>
+                    <input type="checkbox" id="useLocalRephrasing"> Use local rephrasing (faster, no API calls)
+                </label>
+            </div>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function submitQuery() {
+            const queryInput = document.getElementById('queryInput');
+            const resultsDiv = document.getElementById('results');
+            const loading = document.getElementById('loading');
+
+            if (!queryInput.value.trim()) {
+                alert('Please enter a query');
+                return;
+            }
+
+            loading.style.display = 'block';
+            resultsDiv.innerHTML = '';
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: queryInput.value,
+                        use_local: document.getElementById('useLocalRephrasing').checked
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const data = await response.json();
+
+                resultsDiv.innerHTML = `
+                    <div class="result-section">
+                        <h3>Query Result: ${data.used_local_rephrasing ? '(Local Rephrasing)' : '(API Rephrasing)'}</h3>
+                        <pre>${data.rephrased_description}</pre>
+                    </div>`;
+
+                // Add a button to show original description with PMI and related topics
+                const showOriginalBtn = document.createElement('button');
+                showOriginalBtn.textContent = 'Show Original Description';
+                showOriginalBtn.style.marginTop = '10px';
+                showOriginalBtn.onclick = function() {
+                    const originalDiv = document.createElement('div');
+                    originalDiv.className = 'result-section';
+                    originalDiv.innerHTML = `
+                        <h3>Original Description (with PMI and Related Topics):</h3>
+                        <pre>${data.original_description}</pre>
+                    `;
+                    resultsDiv.appendChild(originalDiv);
+                    this.style.display = 'none';
+                };
+                resultsDiv.appendChild(showOriginalBtn);
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="result-section" style="color: red;">
+                    Error: ${error.message}
+                </div>`;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        document.getElementById('queryInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitQuery();
+            }
+        });
+    </script>
+</body>
+</html>

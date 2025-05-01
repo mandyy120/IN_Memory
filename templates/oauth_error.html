@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 50px;
+        }
+        h1 {
+            color: #f44336;
+        }
+        p {
+            line-height: 1.6;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .instructions {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+            text-align: left;
+        }
+        ol {
+            margin-left: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Authorization Error</h1>
+        <p class="error">{{ error }}</p>
+
+        <div class="instructions">
+            <h2>How to Fix This Error</h2>
+            <p>If you're seeing an OAuth error, follow these steps:</p>
+            <ol>
+                <li>Make sure your Google Cloud Console project is properly configured</li>
+                <li>Verify that the OAuth consent screen is set up correctly</li>
+                <li>Check that the redirect URI is correctly configured</li>
+                <li>Ensure that the Google Drive API is enabled for your project</li>
+            </ol>
+        </div>
+
+        <button onclick="window.close()">Close Window</button>
+    </div>
+
+    <script>
+        // Notify the opener window that authorization failed
+        if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({
+                type: 'oauth-error',
+                error: '{{ error }}'
+            }, window.location.origin);
+
+            // Add a button to go back to the main page
+            const container = document.querySelector('.container');
+            const backButton = document.createElement('button');
+            backButton.textContent = 'Return to Application';
+            backButton.style.backgroundColor = '#2196F3';
+            backButton.style.marginLeft = '10px';
+            backButton.onclick = function() {
+                window.opener.location.href = '/data-input';
+                window.close();
+            };
+
+            // Add the button next to the close button
+            document.querySelector('button').parentNode.appendChild(backButton);
+        } else {
+            // If no opener window, add a redirect button
+            const container = document.querySelector('.container');
+            const redirectButton = document.createElement('button');
+            redirectButton.textContent = 'Go to Application';
+            redirectButton.style.backgroundColor = '#2196F3';
+            redirectButton.style.marginLeft = '10px';
+            redirectButton.onclick = function() {
+                window.location.href = '/data-input';
+            };
+
+            // Add the button next to the close button
+            document.querySelector('button').parentNode.appendChild(redirectButton);
+        }
+    </script>
+</body>
+</html>
