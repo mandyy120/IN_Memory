@@ -125,8 +125,21 @@ def get_redirect_uri():
     """Get the redirect URI based on the request host"""
     # Always use the current host dynamically
     host = request.host_url.rstrip('/')
+
+    # For ngrok URLs, ensure we're using https
+    if 'ngrok-free.app' in host:
+        # Extract the ngrok subdomain
+        if host.startswith('http://'):
+            host = 'https://' + host[7:]
+
     redirect_uri = f"{host}/oauth2callback"
     print(f"DEBUG - Using dynamic redirect URI: {redirect_uri}")
+
+    # Log additional information for debugging
+    print(f"DEBUG - Request host: {request.host}")
+    print(f"DEBUG - Request scheme: {request.scheme}")
+    print(f"DEBUG - Request URL: {request.url}")
+    print(f"DEBUG - Request headers: {dict(request.headers)}")
 
     return redirect_uri
 
