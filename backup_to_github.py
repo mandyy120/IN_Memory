@@ -33,7 +33,7 @@ IMPORTANT_FILES = [
     "message_broker.py",
     "start_streaming_workers.py",
     "reset_system.py",
-    
+
 
     # Utility Python files
     "fix_repository_hash.py",
@@ -61,6 +61,7 @@ IMPORTANT_FILES = [
 
     # Shell scripts
     "start_app.sh",
+    "README.md",
 
     # Environment files (without sensitive data)
     ".env.example"
