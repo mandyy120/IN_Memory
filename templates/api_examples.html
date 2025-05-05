@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Examples</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #444;
+            margin-top: 30px;
+        }
+        .url-box {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-weight: bold;
+            font-size: 18px;
+            word-break: break-all;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: monospace;
+        }
+        .copy-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 5px 0;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .note {
+            background-color: #fffde7;
+            padding: 10px;
+            border-left: 4px solid #ffeb3b;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>API Examples</h1>
+        
+        <div class="note">
+            <p><strong>Note:</strong> Replace <code>{NGROK_URL}</code> in the examples below with the current ngrok URL.</p>
+        </div>
+
+        <h2>Current Ngrok URL</h2>
+        <div class="url-box" id="ngrokUrl">
+            Loading...
+        </div>
+        <button class="copy-btn" onclick="copyNgrokUrl()">Copy URL</button>
+
+        <h2>API Endpoints</h2>
+
+        <h3>1. Streaming API - URL Source</h3>
+        <pre><code>curl -X POST {NGROK_URL}/api/streaming \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "url",
+    "uri": "https://en.wikipedia.org/wiki/The_Merchant_of_Venice",
+    "trigger": "manual"
+  }'</code></pre>
+        <button class="copy-btn" onclick="copyExample('url')">Copy Example</button>
+
+        <h3>2. Streaming API - File Source</h3>
+        <pre><code>curl -X POST {NGROK_URL}/api/streaming \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "file",
+    "uri": "/home/dtp2025-001/Pictures/corpus/uploads/uploads/input.txt",
+    "trigger": "manual"
+  }'</code></pre>
+        <button class="copy-btn" onclick="copyExample('file')">Copy Example</button>
+
+        <h3>3. Query API</h3>
+        <pre><code>curl -X POST {NGROK_URL}/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is The Merchant of Venice?",
+    "use_local": true
+  }'</code></pre>
+        <button class="copy-btn" onclick="copyExample('query')">Copy Example</button>
+
+        <h3>4. Status API</h3>
+        <pre><code>curl -X GET {NGROK_URL}/status</code></pre>
+        <button class="copy-btn" onclick="copyExample('status')">Copy Example</button>
+
+        <h3>5. Clear Queue API</h3>
+        <pre><code>curl -X POST {NGROK_URL}/clear-queue</code></pre>
+        <button class="copy-btn" onclick="copyExample('clear')">Copy Example</button>
+
+        <h2>Python Examples</h2>
+
+        <h3>1. Streaming API - URL Source (Python)</h3>
+        <pre><code>import requests
+import json
+
+url = "{NGROK_URL}/api/streaming"
+payload = {
+    "source": "url",
+    "uri": "https://en.wikipedia.org/wiki/The_Merchant_of_Venice",
+    "trigger": "manual"
+}
+headers = {"Content-Type": "application/json"}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())</code></pre>
+        <button class="copy-btn" onclick="copyExample('python-url')">Copy Example</button>
+
+        <h3>2. Query API (Python)</h3>
+        <pre><code>import requests
+import json
+
+url = "{NGROK_URL}/query"
+payload = {
+    "query": "What is The Merchant of Venice?",
+    "use_local": True
+}
+headers = {"Content-Type": "application/json"}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())</code></pre>
+        <button class="copy-btn" onclick="copyExample('python-query')">Copy Example</button>
+    </div>
+
+    <script>
+        // Function to fetch the current ngrok URL
+        async function fetchNgrokUrl() {
+            try {
+                const response = await fetch('/current-ngrok-url');
+                const data = await response.json();
+                document.getElementById('ngrokUrl').textContent = data.url;
+                updateExamples(data.url);
+            } catch (error) {
+                console.error('Error fetching ngrok URL:', error);
+                document.getElementById('ngrokUrl').textContent = 'Error fetching ngrok URL. Please enter it manually.';
+            }
+        }
+
+        // Function to update examples with the current ngrok URL
+        function updateExamples(ngrokUrl) {
+            const codeBlocks = document.querySelectorAll('pre code');
+            codeBlocks.forEach(block => {
+                block.textContent = block.textContent.replace('{NGROK_URL}', ngrokUrl);
+            });
+        }
+
+        // Function to copy the ngrok URL to clipboard
+        function copyNgrokUrl() {
+            const ngrokUrl = document.getElementById('ngrokUrl').textContent;
+            navigator.clipboard.writeText(ngrokUrl)
+                .then(() => alert('Ngrok URL copied to clipboard!'))
+                .catch(err => console.error('Error copying text: ', err));
+        }
+
+        // Function to copy an example to clipboard
+        function copyExample(id) {
+            const examples = {
+                'url': document.querySelectorAll('pre code')[0].textContent,
+                'file': document.querySelectorAll('pre code')[1].textContent,
+                'query': document.querySelectorAll('pre code')[2].textContent,
+                'status': document.querySelectorAll('pre code')[3].textContent,
+                'clear': document.querySelectorAll('pre code')[4].textContent,
+                'python-url': document.querySelectorAll('pre code')[5].textContent,
+                'python-query': document.querySelectorAll('pre code')[6].textContent
+            };
+            
+            navigator.clipboard.writeText(examples[id])
+                .then(() => alert('Example copied to clipboard!'))
+                .catch(err => console.error('Error copying text: ', err));
+        }
+
+        // Set the current ngrok URL manually (since we can't fetch it from the server in this static page)
+        document.addEventListener('DOMContentLoaded', function() {
+            // You can manually update this URL when you start ngrok
+            const ngrokUrl = window.location.origin;
+            document.getElementById('ngrokUrl').textContent = ngrokUrl;
+            updateExamples(ngrokUrl);
+        });
+    </script>
+</body>
+</html>

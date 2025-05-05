@@ -1,0 +1,9 @@
+Last updated: 2025-05-02 00:07:01
+
+Ngrok URL: https://0eb9-103-182-133-35.ngrok-free.app
+
+Authorized JavaScript origins:
+https://0eb9-103-182-133-35.ngrok-free.app
+
+Authorized redirect URIs:
+https://0eb9-103-182-133-35.ngrok-free.app/oauth2callback

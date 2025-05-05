@@ -7,12 +7,19 @@ import time
 import subprocess
 import hashlib
 import requests
+import datetime
 from final2 import KnowledgeRetrieval
 from text import process_file  # Changed from corpus2 import generate_corpus
 import json
 import io
 # Import the new Gdrive module
 import Gdrive
+# Import message broker for streaming API
+try:
+    from message_broker import broker as message_broker
+except ImportError:
+    print("Message broker not available. Streaming API will use direct processing.")
+    message_broker = None
 try:
     import boto3
 except ImportError:
@@ -91,19 +98,18 @@ try:
 
     print("Knowledge system class initialized successfully.")
 
+    # Load data from repository file if specified
+    if repository_file and os.path.exists(repository_file):
+        print(f"Using repository file from config: {repository_file}")
+        knowledge_system.load_data(local=True, file_path=repository_file, save_to_db=True, process_source="main")
+
+    print("Knowledge system initialized successfully!")
+
 except Exception as e:
     print(f"CRITICAL ERROR: Failed to initialize KnowledgeRetrieval: {e}")
     print("Application may not function correctly.")
 
-# Load data from the configured repository file
-try:
-    # Use the repository file from config
-    print(f"Using repository file from config: {repository_file}")
-    knowledge_system.load_data(local=True, file_path=repository_file, save_to_db=True)
-    print("Knowledge system initialized successfully!")
-except Exception as e:
-    print(f"Warning: Initial knowledge system load failed: {e}")
-    print("System will be available once data is uploaded.")
+# Data loading is now handled during initialization
 
 # Google Drive API constants
 MIME_TYPES = {
@@ -200,6 +206,24 @@ def home_page():
 def data_input_page():
     """Serve the data input page"""
     return render_template('data_input.html')
+
+@app.route('/api-examples')
+def api_examples_page():
+    """Serve the API examples page"""
+    return render_template('api_examples.html')
+
+@app.route('/current-ngrok-url')
+def current_ngrok_url():
+    """Return the current ngrok URL"""
+    # Get the current host URL
+    host_url = request.host_url.rstrip('/')
+
+    # For ngrok URLs, ensure we're using https
+    if 'ngrok-free.app' in host_url:
+        if host_url.startswith('http://'):
+            host_url = 'https://' + host_url[7:]
+
+    return jsonify({"url": host_url})
 
 @app.route('/query', methods=['POST'])
 def handle_query():
@@ -308,7 +332,7 @@ def process_file_async(file_path, output_file):
         # Update existing knowledge system instead of replacing it
         try:
             # Load the processed data - let the system handle checking for new data
-            knowledge_system.load_data(local=True, file_path=output_file, append=True, save_to_db=True)
+            knowledge_system.load_data(local=True, file_path=output_file, append=True, save_to_db=True, process_source="main")
 
             processing_status["status"] = "complete"
             processing_status["progress"] = 100
@@ -396,7 +420,7 @@ def process_multiple_files_async(file_paths, output_file):
 
         try:
             # Load the processed data - let the system handle checking for new data
-            knowledge_system.load_data(local=True, file_path=output_file, append=True, save_to_db=True)
+            knowledge_system.load_data(local=True, file_path=output_file, append=True, save_to_db=True, process_source="main")
 
             processing_status["status"] = "complete"
             processing_status["progress"] = 100
@@ -594,6 +618,13 @@ def crawl_website(url):
             f.write(content)
 
         print(f"Raw crawled content saved to: {raw_content_file}")
+
+        # Check if we got meaningful content
+        if content.startswith("No content was retrieved from"):
+            processing_status["status"] = "error"
+            processing_status["error"] = content
+            print(f"Crawling error: {content}")
+            return  # Exit the function early
 
         # Update status
         processing_status["status"] = "processing_content"
@@ -823,13 +854,23 @@ def fetch_from_s3():
 
 @app.route('/fetch-from-slack', methods=['POST'])
 def fetch_from_slack():
-    """Handle Slack message and file fetching"""
+    """
+    Handle Slack message and file fetching
+
+    Expected JSON payload:
+    {
+        "sources": ["public", "private", "dm"],  // Types of channels to fetch from
+        "dataTypes": ["messages", "files"],      // Types of data to fetch
+        "slackBotToken": "xoxb-your-token"      // Optional Slack bot token
+    }
+    """
     global processing_status
 
     try:
         data = request.get_json()
         sources = data.get('sources', [])
         data_types = data.get('dataTypes', [])
+        slack_token = data.get('slackBotToken')  # Optional bot token
 
         if not sources or not isinstance(sources, list):
             return jsonify({"error": "Sources must be provided as a list"}), 400
@@ -857,7 +898,7 @@ def fetch_from_slack():
         # Start Slack fetching in a separate thread
         threading.Thread(
             target=fetch_slack_data_async,
-            args=(sources, data_types)
+            args=(sources, data_types, slack_token)
         ).start()
 
         return jsonify({"message": "Slack fetch started"})
@@ -866,8 +907,15 @@ def fetch_from_slack():
         processing_status["error"] = str(e)
         return jsonify({"error": str(e)}), 500
 
-def fetch_slack_data_async(sources, data_types):
-    """Process Slack data in a separate thread"""
+def fetch_slack_data_async(sources, data_types, provided_token=None):
+    """
+    Process Slack data in a separate thread
+
+    Args:
+        sources (list): List of channel types to fetch from (public, private, dm)
+        data_types (list): List of data types to fetch (messages, files)
+        provided_token (str, optional): Slack bot token provided in the API call
+    """
     global processing_status
     global knowledge_system
 
@@ -881,14 +929,37 @@ def fetch_slack_data_async(sources, data_types):
         # Define output file path for collected texts
         output_file_path = os.path.join('uploads', 'collected_slack_texts.txt')
 
-        # Check for user credentials first
-        user_credentials_path = 'user_credentials/slack_credentials.env'
-        if os.path.exists(user_credentials_path):
-            # Use user-provided credentials
-            credential_file = user_credentials_path
+        # Determine which Slack token to use
+        slack_token = None
+
+        # 1. Use token provided in the API call if available
+        if provided_token:
+            slack_token = provided_token
+            print("Using Slack token provided in API call")
         else:
-            # Fall back to default credentials
-            credential_file = SLACK_CREDENTIALS_FILE
+            # 2. Check for user credentials
+            user_credentials_path = 'user_credentials/slack_credentials.env'
+            if os.path.exists(user_credentials_path):
+                # Use user-provided credentials
+                credential_file = user_credentials_path
+                # Load the Slack token from the credentials file
+                from dotenv import load_dotenv
+                load_dotenv(credential_file)
+                slack_token = os.getenv("SLACK_BOT_TOKEN")
+                print("Using Slack token from user credentials")
+            else:
+                # 3. Fall back to default credentials
+                credential_file = SLACK_CREDENTIALS_FILE
+                # Load the Slack token from the credentials file
+                from dotenv import load_dotenv
+                load_dotenv(credential_file)
+                slack_token = os.getenv("SLACK_BOT_TOKEN")
+                print("Using Slack token from default credentials")
+
+        if not slack_token:
+            processing_status["status"] = "error"
+            processing_status["error"] = "Missing Slack Bot Token. Please provide a token in the API call or save it in credentials."
+            return
 
         # Convert sources and data_types lists to comma-separated strings
         sources_str = ','.join(sources)
@@ -917,17 +988,6 @@ def fetch_slack_data_async(sources, data_types):
 
             # Set environment variables for the script
             env = os.environ.copy()
-
-            # Load the Slack token from the credentials file
-            from dotenv import load_dotenv
-            load_dotenv(credential_file)
-            slack_token = os.getenv("SLACK_BOT_TOKEN")
-
-            if not slack_token:
-                processing_status["status"] = "error"
-                processing_status["error"] = "Missing Slack Bot Token"
-                return
-
             env["SLACK_BOT_TOKEN"] = slack_token
 
             # Run the modified script
@@ -1256,10 +1316,278 @@ def process_drive_files(selected_files, access_token):
         processing_status["error"] = str(e)
         print(f"Error in Drive file processing: {e}")
 
+@app.route('/api/streaming', methods=['POST'])
+def streaming_api():
+    """
+    Unified streaming API for data ingestion from multiple sources.
+
+    This endpoint accepts data from various sources (file upload, URL, Google Drive, S3, Slack)
+    and processes it in a unified way. It supports both manual triggers and automated events.
+
+    Expected JSON payload:
+    {
+        "source": "url|file|gdrive|s3|slack",
+        "uri": "URI or identifier for the data source",
+        "trigger": "manual|event",
+        "eventId": "Optional event identifier for event-driven ingestion",
+        "metadata": {
+            // Optional additional metadata
+            // For Slack source, you can include:
+            "slack": {
+                "channelTypes": ["public", "private", "dm"],  // Types of channels to fetch from
+                "dataTypes": ["messages", "files"],           // Types of data to fetch
+                "slackBotToken": "xoxb-your-token"           // Optional Slack bot token
+            }
+        }
+    }
+    """
+    global processing_status
+
+    try:
+        # Get the request data
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        # Validate required fields
+        required_fields = ["source", "uri"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Extract data from the request
+        source = data.get("source").lower()
+        uri = data.get("uri")
+        trigger = data.get("trigger", "manual").lower()
+        event_id = data.get("eventId")
+        metadata = data.get("metadata", {})
+
+        # Validate source
+        valid_sources = ["url", "file", "gdrive", "s3", "slack"]
+        if source not in valid_sources:
+            return jsonify({"error": f"Invalid source. Must be one of: {', '.join(valid_sources)}"}), 400
+
+        # Reset processing status
+        reset_processing_status()
+        processing_status["status"] = f"starting_{source}_ingestion"
+        processing_status["progress"] = 5
+        processing_status["source"] = source
+        processing_status["trigger"] = trigger
+        if event_id:
+            processing_status["eventId"] = event_id
+
+        # Prepare task data
+        task_data = {
+            "source": source,
+            "uri": uri,
+            "trigger": trigger,
+            "metadata": metadata
+        }
+
+        # Add source-specific data
+        if source == "gdrive":
+            # For Google Drive, we need to include the access token
+            user_id = get_user_session_id()
+
+            # Check if we have a token for this user
+            if user_id not in oauth_tokens:
+                return jsonify({"error": "Not authorized. Please connect to Google Drive first."}), 401
+
+            # Get the token
+            token_info = oauth_tokens[user_id]
+            access_token = token_info.get('access_token')
+
+            if not access_token:
+                return jsonify({"error": "Invalid token. Please reconnect to Google Drive."}), 401
+
+            # Add access token to task data
+            task_data["access_token"] = access_token
+
+        # Use message broker if available, otherwise process directly
+        if message_broker:
+            # Queue the task in the message broker
+            task_id = message_broker.queue_task(task_data)
+
+            return jsonify({
+                "message": f"Data ingestion queued for {source}",
+                "status": "queued",
+                "source": source,
+                "trigger": trigger,
+                "taskId": task_id
+            })
+        else:
+            # Process directly based on source
+            if source == "url":
+                # Start URL crawling in a separate thread
+                threading.Thread(
+                    target=crawl_website,
+                    args=(uri,)
+                ).start()
+
+            elif source == "file":
+                # For file source, URI should be a path to a local file
+                if not os.path.exists(uri):
+                    return jsonify({"error": f"File not found: {uri}"}), 404
+
+                # Define output file path
+                output_file_path = app_config.get("repository_file", "/home/dtp2025-001/Pictures/corpus/uploads/uploads/repository_generated.txt")
+
+                # Start file processing in a separate thread
+                threading.Thread(
+                    target=process_file_async,
+                    args=(uri, output_file_path)
+                ).start()
+
+            elif source == "gdrive":
+                # For Google Drive, URI should be a file ID or a list of file IDs
+                if isinstance(uri, str):
+                    file_ids = [uri]
+                elif isinstance(uri, list):
+                    file_ids = uri
+                else:
+                    return jsonify({"error": "Invalid URI format for Google Drive. Expected string or list of file IDs"}), 400
+
+                # Start Google Drive fetching in a separate thread
+                threading.Thread(
+                    target=process_drive_files,
+                    args=(file_ids, access_token)
+                ).start()
+
+            elif source == "s3":
+                # For S3, URI should be in the format "s3://bucket-name/path/to/file"
+                if not uri.startswith("s3://"):
+                    return jsonify({"error": "Invalid S3 URI format. Expected s3://bucket-name/path/to/file"}), 400
+
+                # Parse the S3 URI
+                s3_parts = uri[5:].split("/", 1)
+                if len(s3_parts) < 2:
+                    return jsonify({"error": "Invalid S3 URI format. Expected s3://bucket-name/path/to/file"}), 400
+
+                # Extract file type
+                file_ext = os.path.splitext(s3_parts[1])[1].lstrip('.')
+                if not file_ext:
+                    return jsonify({"error": "Could not determine file type from S3 URI"}), 400
+
+                # Start S3 fetching in a separate thread
+                threading.Thread(
+                    target=fetch_s3_files_async,
+                    args=([file_ext],)
+                ).start()
+
+            elif source == "slack":
+                # For Slack, we need additional parameters
+                slack_params = metadata.get("slack", {})
+
+                # Get channel types (public, private, dm)
+                channel_types = slack_params.get("channelTypes", ["public"])
+                if not isinstance(channel_types, list):
+                    channel_types = [channel_types]
+
+                # Get data types (messages, files)
+                data_types = slack_params.get("dataTypes", ["messages"])
+                if not isinstance(data_types, list):
+                    data_types = [data_types]
+
+                # Get Slack bot token if provided
+                slack_token = slack_params.get("slackBotToken")
+
+                # Start Slack fetching in a separate thread
+                threading.Thread(
+                    target=fetch_slack_data_async,
+                    args=(channel_types, data_types, slack_token)
+                ).start()
+
+            return jsonify({
+                "message": f"Data ingestion started for {source}",
+                "status": "processing",
+                "source": source,
+                "trigger": trigger,
+                "requestId": hashlib.md5(f"{source}-{uri}-{time.time()}".encode()).hexdigest()
+            })
+
+    except Exception as e:
+        print(f"Error in streaming API: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Simple health check endpoint"""
     return jsonify({"status": "ok"})
+
+@app.route('/status', methods=['GET'])
+def check_status():
+    """Check the status of streaming tasks and overall processing"""
+    global processing_status
+
+    # Get task ID from query parameter if provided
+    task_id = request.args.get('task_id')
+
+    # Check if message broker is available
+    broker_available = message_broker is not None
+
+    # Get queue size if broker is available
+    queue_size = len(message_broker.tasks) if broker_available else 0
+
+    # Check if workers are running
+    # For simplicity, we'll just check if the worker process exists
+    workers_running = False
+    try:
+        # Use ps to check if streaming_worker.py is running
+        ps_output = subprocess.check_output(["ps", "aux"]).decode("utf-8")
+        workers_running = "start_streaming_workers.py" in ps_output
+
+        if not workers_running:
+            print("Workers not detected. Please start them with: python start_streaming_workers.py")
+    except Exception as e:
+        print(f"Error checking worker status: {e}")
+
+    # Build status response
+    status_info = {
+        "current_status": processing_status,
+        "streaming_api": {
+            "broker_available": broker_available,
+            "queue_size": queue_size,
+            "workers_running": workers_running
+        },
+        "system_info": {
+            "time": datetime.datetime.now().isoformat(),
+            "api_version": "1.0"
+        }
+    }
+
+    # Add task-specific information if requested
+    if task_id and broker_available:
+        # This is a simple implementation - in a real system, you would store task status in a database
+        status_info["task"] = {
+            "id": task_id,
+            "status": "unknown",  # We don't track individual tasks in this simple implementation
+            "message": "Task status tracking is limited in the current implementation"
+        }
+
+    return jsonify(status_info)
+
+@app.route('/clear-queue', methods=['POST'])
+def clear_queue():
+    """Clear all tasks from the streaming queue"""
+    global message_broker
+
+    # Check if message broker is available
+    if message_broker is None:
+        return jsonify({"error": "Message broker not available"}), 500
+
+    try:
+        # Clear the queue
+        message_broker.clear_queue()
+
+        return jsonify({
+            "message": "Queue cleared successfully",
+            "queue_size": 0,
+            "time": datetime.datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"Error clearing queue: {e}")
+        return jsonify({"error": f"Error clearing queue: {str(e)}"}), 500
 
 @app.route('/debug-redirect-uri', methods=['GET'])
 def debug_redirect_uri():

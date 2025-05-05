@@ -6,11 +6,27 @@ import re
 import json
 import time
 import hashlib
+import pickle
 from collections import defaultdict
 from pymongo import MongoClient
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError, ConnectionFailure
 from tqdm import tqdm
+
+# Import file locking utility
+try:
+    from file_lock import FileLock
+except ImportError:
+    # Define a simple FileLock class if the file_lock module is not available
+    class FileLock:
+        def __init__(self, file_path, timeout=10, delay=0.1):
+            self.file_path = file_path
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, type, value, traceback):
+            pass
 
 # Define required collections that must exist for the system to work properly
 REQUIRED_COLLECTIONS = [
@@ -51,7 +67,7 @@ class KnowledgeRetrieval:
             mongo_db_name (str): MongoDB database name
         """
         # MongoDB configuration
-        self.use_mongodb = True  # Always use MongoDB
+        self.use_mongodb = use_mongodb  # Use the provided value
         self.mongo_connection_string = mongo_connection_string
         self.mongo_db_name = mongo_db_name
         self.mongo_client = None
@@ -59,6 +75,12 @@ class KnowledgeRetrieval:
 
         # Connect to MongoDB
         try:
+            if not self.use_mongodb:
+                print("MongoDB is disabled in configuration. Using file-based storage.")
+                self.mongo_client = None
+                self.mongo_db = None
+                return
+
             self.mongo_client = MongoClient(self.mongo_connection_string, serverSelectionTimeoutMS=5000)
             # Verify connection
             self.mongo_client.admin.command('ping')
@@ -139,9 +161,11 @@ class KnowledgeRetrieval:
                 print("Repository file not found in any of the expected locations.")
 
         except Exception as e:
-            print(f"ERROR: Failed to connect to MongoDB: {e}")
-            print("The application requires MongoDB to function properly.")
-            raise ConnectionFailure(f"MongoDB connection failed: {e}")
+            print(f"WARNING: Failed to connect to MongoDB: {e}")
+            print("Falling back to file-based storage.")
+            self.use_mongodb = False
+            self.mongo_client = None
+            self.mongo_db = None
 
         # Initialize backend tables and parameters
         self.backend_tables = self._initialize_backend_tables()
@@ -439,7 +463,7 @@ class KnowledgeRetrieval:
                     if distanceAB > 1:
                         ctokens = self.update_hash(ctokens, key)
 
-    def load_data(self, local=True, file_path=None, url="https://mltblog.com/3y8MXq5", append=True, save_to_db=True):
+    def load_data(self, local=True, file_path=None, url="https://mltblog.com/3y8MXq5", append=True, save_to_db=True, process_source="main"):
         """
         Load data from local file or URL and build backend tables. English-only version.
 
@@ -449,216 +473,226 @@ class KnowledgeRetrieval:
             url (str): URL to load data from if local=False
             append (bool): Whether to append to existing data or replace it
             save_to_db (bool): Whether to save to MongoDB after loading (default: True)
+            process_source (str): Source of the process calling this method ('main' or 'worker')
         """
-        # First, ensure KW_map is loaded if it exists
-        if not self.backend_tables['KW_map']:
-            self.backend_tables['KW_map'] = self._load_keyword_map()
+        # Create a lock file path based on the repository file
+        lock_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'repository_lock')
 
-        # Check if we have all required collections with data
-        collection_counts = {}
-        for collection in ['dictionary', 'hash_pairs', 'KW_map']:
-            collection_counts[collection] = self.mongo_db[collection].count_documents({})
+        # Use a file lock to prevent multiple processes from loading data simultaneously
+        with FileLock(lock_file_path):
+            print(f"[{process_source}] Acquired lock for data loading")
 
-        all_have_data = all(count > 0 for count in collection_counts.values())
+            # First, ensure KW_map is loaded if it exists
+            if not self.backend_tables['KW_map']:
+                self.backend_tables['KW_map'] = self._load_keyword_map()
 
-        # If all collections have data, we might not need to load from file
-        if all_have_data:
-            print("All required collections already have data in MongoDB.")
+            # Check if we have all required collections with data
+            all_have_data = False
+            if self.use_mongodb and self.mongo_db is not None:
+                collection_counts = {}
+                for collection in ['dictionary', 'hash_pairs', 'KW_map']:
+                    collection_counts[collection] = self.mongo_db[collection].count_documents({})
 
-        # Check multiple possible repository file paths if file_path is not specified
-        if local and file_path is None:
-            repo_paths = [
-                "/home/dtp2025-001/Pictures/corpus/uploads/uploads/repository_generated.txt",
-                "uploads/repository_generated.txt",
-                "repository_generated.txt",
-                "repository.txt"
-            ]
+                all_have_data = all(count > 0 for count in collection_counts.values())
 
-            # Try to load repository file path from config.json if it exists
-            config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r') as f:
-                        config = json.load(f)
-                        if "repository_file" in config:
-                            repo_paths.insert(0, config["repository_file"])
-                except Exception as e:
-                    print(f"Error loading repository path from config: {e}")
-
-            for path in repo_paths:
-                if os.path.exists(path):
-                    file_path = path
-                    print(f"Found repository file: {file_path}")
-                    break
-
-            if file_path is None:
-                print("Repository file not found in any of the expected locations.")
+                # If all collections have data, we might not need to load from file
                 if all_have_data:
-                    print("Using existing data from MongoDB.")
-                    return
-                else:
-                    print("No repository file found and MongoDB collections are empty.")
-                    return
+                    print(f"[{process_source}] All required collections already have data in MongoDB.")
 
-        # Check if we need to load data
-        file_hash = None
-        has_new_data = False  # Default to False if we have data in MongoDB
+            # Check multiple possible repository file paths if file_path is not specified
+            if local and file_path is None:
+                repo_paths = [
+                    "/home/dtp2025-001/Pictures/corpus/uploads/uploads/repository_generated.txt",
+                    "uploads/repository_generated.txt",
+                    "repository_generated.txt",
+                    "repository.txt"
+                ]
 
-        if local and os.path.exists(file_path):
-            # Calculate file hash
-            with open(file_path, 'rb') as f:
-                file_content = f.read()
-                file_hash = hashlib.md5(file_content).hexdigest()
+                # Try to load repository file path from config.json if it exists
+                config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, 'r') as f:
+                            config = json.load(f)
+                            if "repository_file" in config:
+                                repo_paths.insert(0, config["repository_file"])
+                    except Exception as e:
+                        print(f"Error loading repository path from config: {e}")
 
-            # Check if we have a record of this file hash
-            metadata = self.mongo_db.metadata.find_one({"_id": "repository_file"})
-            last_hash = metadata.get('hash') if metadata else None
+                for path in repo_paths:
+                    if os.path.exists(path):
+                        file_path = path
+                        print(f"Found repository file: {file_path}")
+                        break
 
-            # Get the highest entity ID from the repository file
-            highest_entity_id = 0
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if line.strip():
-                        try:
-                            # Extract the entity ID from the beginning of the line
-                            parts = line.split('~~', 1)
-                            if len(parts) >= 1 and parts[0].isdigit():
-                                entity_id = int(parts[0])
-                                if entity_id > highest_entity_id:
-                                    highest_entity_id = entity_id
-                        except Exception as e:
-                            pass
+                if file_path is None:
+                    print("Repository file not found in any of the expected locations.")
+                    if all_have_data:
+                        print("Using existing data from MongoDB.")
+                        return
+                    else:
+                        print("No repository file found and MongoDB collections are empty.")
+                        return
 
-            # Count lines in the file for an additional check
-            with open(file_path, 'r', encoding='utf-8') as f:
-                line_count = sum(1 for line in f if line.strip())
+            # Check if we need to load data
+            file_hash = None
+            has_new_data = False  # Default to False if we have data in MongoDB
 
-            # Get the last line count and highest entity ID from metadata
-            last_line_count = metadata.get('line_count', metadata.get('entity_count')) if metadata else None
-            last_highest_entity_id = metadata.get('highest_entity_id') if metadata else None
+            if local and os.path.exists(file_path):
+                # Calculate file hash
+                with open(file_path, 'rb') as f:
+                    file_content = f.read()
+                    file_hash = hashlib.md5(file_content).hexdigest()
 
-            # If no previous hash or hash is different AND line count has changed, we have new data
-            hash_changed = last_hash is None or last_hash != file_hash
-            count_changed = last_line_count is None or last_line_count != line_count
-            id_changed = last_highest_entity_id is None or last_highest_entity_id < highest_entity_id
+                # Get the highest entity ID from the repository file
+                highest_entity_id = 0
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            try:
+                                # Extract the entity ID from the beginning of the line
+                                parts = line.split('~~', 1)
+                                if len(parts) >= 1 and parts[0].isdigit():
+                                    entity_id = int(parts[0])
+                                    if entity_id > highest_entity_id:
+                                        highest_entity_id = entity_id
+                            except Exception as e:
+                                pass
 
-            # Consider it new data if the highest entity ID has increased
-            # This is the most reliable way to detect new data
-            has_new_data = id_changed
+                # Count lines in the file for an additional check
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    line_count = sum(1 for line in f if line.strip())
 
-            if id_changed:
-                print(f"New data detected: Highest entity ID increased from {last_highest_entity_id} to {highest_entity_id}")
-
-            # If hash changed but IDs didn't, it's likely just formatting changes
-            if hash_changed and not id_changed:
-                print(f"Repository file hash has changed but highest entity ID ({highest_entity_id}) is the same.")
-                print("This is likely due to formatting changes, not new data.")
-
-            if hash_changed and not count_changed:
-                print(f"Repository file hash has changed but line count ({line_count}) is the same.")
-                print("This is likely due to formatting changes, not new data.")
-                print("Updating stored hash to prevent false detection of new data...")
-
-                # Update the hash in MongoDB to prevent future false detections
-                self.mongo_db.metadata.update_one(
-                    {"_id": "repository_file"},
-                    {"$set": {"hash": file_hash, "timestamp": time.time()}},
-                    upsert=True
-                )
-                print(f"Updated repository file hash in database: {file_hash}")
-
-                # No new data to process
-                has_new_data = False
-
-            if not has_new_data and all_have_data:
-                print(f"Repository file {file_path} has not changed since last load.")
-                print("All required collections exist with data. No need to reload from file.")
-                return
-            elif not has_new_data and not all_have_data:
-                print(f"Repository file {file_path} has not changed, but some collections are empty.")
-                print("Loading from file to populate empty collections...")
+                # Default to loading data if MongoDB is not available
                 has_new_data = True
-            elif has_new_data:
-                print(f"New data detected in repository file: {file_path}")
-                if count_changed:
-                    print(f"Line count changed from {last_line_count} to {line_count}")
-                print("Loading new data...")
+                last_highest_entity_id = 0
 
-        # Load data from file or URL if needed
-        if not local or has_new_data:
-            if local:
-                # Read file with UTF-8 encoding
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = f.read()
-                except UnicodeDecodeError:
-                    # Fall back to chardet if UTF-8 fails
-                    with open(file_path, "rb") as f:
-                        raw_data = f.read()
-                    encoding_info = chardet.detect(raw_data)
-                    encoding = encoding_info["encoding"] if encoding_info["encoding"] else "utf-8"
-                    print(f"Using detected encoding: {encoding}")
-                    with open(file_path, "r", encoding=encoding, errors="replace") as f:
-                        data = f.read()
+                # If MongoDB is available, check if we have a record of this file hash
+                if self.use_mongodb and self.mongo_db is not None:
+                    metadata = self.mongo_db.metadata.find_one({"_id": "repository_file"})
+                    last_hash = metadata.get('hash') if metadata else None
+
+                    # Get the last line count and highest entity ID from metadata
+                    last_line_count = metadata.get('line_count', metadata.get('entity_count')) if metadata else None
+                    last_highest_entity_id = metadata.get('highest_entity_id') if metadata else None
+
+                    # If no previous hash or hash is different AND line count has changed, we have new data
+                    hash_changed = last_hash is None or last_hash != file_hash
+                    count_changed = last_line_count is None or last_line_count != line_count
+                    id_changed = last_highest_entity_id is None or last_highest_entity_id < highest_entity_id
+
+                    # Consider it new data if the highest entity ID has increased
+                    # This is the most reliable way to detect new data
+                    has_new_data = id_changed
+
+                    if id_changed:
+                        print(f"New data detected: Highest entity ID increased from {last_highest_entity_id} to {highest_entity_id}")
+
+                    # If hash changed but IDs didn't, it's likely just formatting changes
+                    if hash_changed and not id_changed:
+                        print(f"Repository file hash has changed but highest entity ID ({highest_entity_id}) is the same.")
+                        print("This is likely due to formatting changes, not new data.")
+
+                    if hash_changed and not count_changed:
+                        print(f"Repository file hash has changed but line count ({line_count}) is the same.")
+                        print("This is likely due to formatting changes, not new data.")
+                else:
+                    print(f"MongoDB not available. Loading data from file: {file_path}")
+                    print(f"Found {line_count} lines with highest entity ID: {highest_entity_id}")
+                    # No MongoDB available, so we can't update the hash
+
+                    # No new data to process
+                    has_new_data = False
+
+                if not has_new_data and all_have_data:
+                    print(f"Repository file {file_path} has not changed since last load.")
+                    print("All required collections exist with data. No need to reload from file.")
+                    return
+                elif not has_new_data and not all_have_data:
+                    print(f"Repository file {file_path} has not changed, but some collections are empty.")
+                    print("Loading from file to populate empty collections...")
+                    has_new_data = True
+                elif has_new_data:
+                    print(f"New data detected in repository file: {file_path}")
+                    if count_changed:
+                        print(f"Line count changed from {last_line_count} to {line_count}")
+                    print("Loading new data...")
+
+            # Load data from file or URL if needed
+            if not local or has_new_data:
+                if local:
+                    # Read file with UTF-8 encoding
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            data = f.read()
+                    except UnicodeDecodeError:
+                        # Fall back to chardet if UTF-8 fails
+                        with open(file_path, "rb") as f:
+                            raw_data = f.read()
+                        encoding_info = chardet.detect(raw_data)
+                        encoding = encoding_info["encoding"] if encoding_info["encoding"] else "utf-8"
+                        print(f"Using detected encoding: {encoding}")
+                        with open(file_path, "r", encoding=encoding, errors="replace") as f:
+                            data = f.read()
+                else:
+                    # Get repository from GitHub URL
+                    response = requests.get(url)
+                    response.encoding = 'utf-8'
+                    data = response.text
+
+                print("Data loaded successfully!")
+
+                # Build tables with the loaded data
+                self.build_tables(data, append=append)
+
+                # After building tables, ensure KW_map is updated and saved
+                print("Finalizing KW_map after data loading...")
+                self.create_keyword_map(update_memory=True, save_to_file=False)
+
+                # Save to MongoDB if save_to_db is True
+                if save_to_db:
+                    print("Saving data to MongoDB...")
+                    # Only force save if this is the first time loading data or we have new data
+                    force_save = len(self.backend_tables.get('dictionary', {})) == 0 or has_new_data
+                    self.save_backend_tables(force=force_save)
+
+                    # Update the processed file hash, line count, and highest entity ID in the database
+                    if file_hash:
+                        # Count lines in the file
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            line_count = sum(1 for line in f if line.strip())
+
+                        # Get the highest entity ID from the repository file
+                        highest_entity_id = 0
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if line.strip():
+                                    try:
+                                        # Extract the entity ID from the beginning of the line
+                                        parts = line.split('~~', 1)
+                                        if len(parts) >= 1 and parts[0].isdigit():
+                                            entity_id = int(parts[0])
+                                            if entity_id > highest_entity_id:
+                                                highest_entity_id = entity_id
+                                    except Exception as e:
+                                        pass
+
+                        self.mongo_db.metadata.update_one(
+                            {"_id": "repository_file"},
+                            {"$set": {
+                                "hash": file_hash,
+                                "line_count": line_count,
+                                "entity_count": line_count,  # Keep for backward compatibility
+                                "highest_entity_id": highest_entity_id,
+                                "timestamp": time.time()
+                            }},
+                            upsert=True
+                        )
+                        print(f"Updated repository file hash in database: {file_hash}")
+                        print(f"Updated line count in database: {line_count}")
+                        print(f"Updated highest entity ID in database: {highest_entity_id}")
             else:
-                # Get repository from GitHub URL
-                response = requests.get(url)
-                response.encoding = 'utf-8'
-                data = response.text
-
-            print("Data loaded successfully!")
-
-            # Build tables with the loaded data
-            self.build_tables(data, append=append)
-
-            # After building tables, ensure KW_map is updated and saved
-            print("Finalizing KW_map after data loading...")
-            self.create_keyword_map(update_memory=True, save_to_file=False)
-
-            # Save to MongoDB if save_to_db is True
-            if save_to_db:
-                print("Saving data to MongoDB...")
-                # Only force save if this is the first time loading data or we have new data
-                force_save = len(self.backend_tables.get('dictionary', {})) == 0 or has_new_data
-                self.save_backend_tables(force=force_save)
-
-                # Update the processed file hash, line count, and highest entity ID in the database
-                if file_hash:
-                    # Count lines in the file
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        line_count = sum(1 for line in f if line.strip())
-
-                    # Get the highest entity ID from the repository file
-                    highest_entity_id = 0
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            if line.strip():
-                                try:
-                                    # Extract the entity ID from the beginning of the line
-                                    parts = line.split('~~', 1)
-                                    if len(parts) >= 1 and parts[0].isdigit():
-                                        entity_id = int(parts[0])
-                                        if entity_id > highest_entity_id:
-                                            highest_entity_id = entity_id
-                                except Exception as e:
-                                    pass
-
-                    self.mongo_db.metadata.update_one(
-                        {"_id": "repository_file"},
-                        {"$set": {
-                            "hash": file_hash,
-                            "line_count": line_count,
-                            "entity_count": line_count,  # Keep for backward compatibility
-                            "highest_entity_id": highest_entity_id,
-                            "timestamp": time.time()
-                        }},
-                        upsert=True
-                    )
-                    print(f"Updated repository file hash in database: {file_hash}")
-                    print(f"Updated line count in database: {line_count}")
-                    print(f"Updated highest entity ID in database: {highest_entity_id}")
-        else:
-            print("No new data to load. Using existing data from MongoDB.")
+                print("No new data to load. Using existing data from MongoDB.")
 
     def build_tables(self, data, append=True):
         """Build all backend tables from loaded data."""
@@ -1380,6 +1414,34 @@ class KnowledgeRetrieval:
 
         print("Backend tables saved successfully!")
 
+    def _save_to_local_files(self):
+        """
+        Save backend tables to local files as a fallback when MongoDB is not available.
+        """
+        try:
+            # Create a directory for the data files if it doesn't exist
+            data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+            os.makedirs(data_dir, exist_ok=True)
+
+            # Save each table to a separate file
+            for table_name, table_data in self.backend_tables.items():
+                file_path = os.path.join(data_dir, f"{table_name}.pkl")
+                with open(file_path, 'wb') as f:
+                    pickle.dump(table_data, f)
+                print(f"Saved {table_name} to {file_path}")
+
+            # Save metadata
+            metadata = {
+                "timestamp": time.time(),
+                "tables": list(self.backend_tables.keys())
+            }
+            with open(os.path.join(data_dir, "metadata.pkl"), 'wb') as f:
+                pickle.dump(metadata, f)
+
+            print("All tables saved to local files successfully!")
+        except Exception as e:
+            print(f"Error saving tables to local files: {e}")
+
     def _save_to_mongodb(self, force=False):
         """
         Save all backend tables to MongoDB.
@@ -1387,8 +1449,10 @@ class KnowledgeRetrieval:
         Args:
             force (bool): If True, save even if data already exists
         """
-        if self.mongo_db is None:
-            print("MongoDB not connected. Cannot save tables.")
+        if not self.use_mongodb or self.mongo_db is None:
+            print("MongoDB not connected or disabled. Cannot save tables to MongoDB.")
+            print("Using file-based storage instead.")
+            self._save_to_local_files()
             return
 
         # Check if data already exists in MongoDB and skip saving if it does

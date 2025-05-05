@@ -22,7 +22,7 @@ from pymongo import MongoClient
 import time
 
 # Repository file path
-REPOSITORY_FILE = "/home/dtp-test/Pictures/corpus/uploads/uploads/repository_generated.txt"
+REPOSITORY_FILE = "/home/dtp2025-001/Pictures/corpus/uploads/uploads/repository_generated.txt"
 
 # MongoDB connection parameters
 MONGO_CONNECTION_STRING = "mongodb://localhost:27017"

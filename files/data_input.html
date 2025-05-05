@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datopic In Memory Chatbot - Data Input</title>
+    <!-- Google API Client Library -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://apis.google.com/js/platform.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-box {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        input[type="text"], input[type="file"], input[type="password"], textarea {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .progress-container {
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-bar {
+            height: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .progress {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 5px;
+            width: 0%;
+        }
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .nav-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .nav-bar a {
+            padding: 8px 16px;
+            background-color: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .nav-bar a:hover {
+            background-color: #0b7dda;
+        }
+        .checkbox-group {
+            margin: 10px 0;
+        }
+        .checkbox-group label {
+            display: inline-block;
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .toggle-section {
+            cursor: pointer;
+            color: #2196F3;
+            margin-top: 10px;
+            display: inline-block;
+        }
+        .credentials-section {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: none;
+        }
+        .tab-header {
+            margin-bottom: 15px;
+            display: flex;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab-header button {
+            background-color: #f1f1f1;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 10px 15px;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            color: #333;
+        }
+        .tab-header button.active {
+            background-color: #ddd;
+        }
+        .tab-content {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        .file-list {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .file-list ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+
+        .file-list li {
+            margin-bottom: 5px;
+        }
+
+        .files-info {
+            margin: 10px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        @media (max-width: 600px) {
+            input[type="text"], input[type="file"], input[type="password"], textarea {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+            button {
+                width: 100%;
+            }
+            .container {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Datopic In Memory LLM</h1>
+
+        <div class="nav-bar">
+            <h2>Data Input System</h2>
+            <a href="/">Query System</a>
+        </div>
+
+        <!-- User Credentials Section -->
+        <div class="input-box">
+            <h3>User Credentials</h3>
+            <p>Set up your credentials for data access:</p>
+
+            <div class="tab-header">
+                <button class="tablink active" onclick="openTab(event, 'googleDriveTab')">Google Drive</button>
+                <button class="tablink" onclick="openTab(event, 'awsS3Tab')">AWS S3</button>
+                <button class="tablink" onclick="openTab(event, 'slackTab')">Slack</button>
+                <!-- <button class="tablink" onclick="openTab(event, 'apiKeysTab')">API Keys</button>
+                <button class="tablink" onclick="openTab(event, 'databaseTab')">Database</button> -->
+            </div>
+
+            <div id="googleDriveTab" class="tab-content active">
+                <div class="form-group">
+                    <label for="credentialInput">Google Drive OAuth Token:</label>
+                    <textarea id="credentialInput" placeholder="Paste your OAuth token JSON here..."></textarea>
+                    <small>This is required for Google Drive access. Include the access_token field.</small>
+                </div>
+                <button onclick="saveCredentials('google')">Save Google Credentials</button>
+                <button onclick="authorizeGoogleDrive()" style="background-color: #DB4437;">Authorize with Google</button>
+                <div id="googleCredentialStatus" class="status-message"></div>
+            </div>
+
+            <div id="awsS3Tab" class="tab-content">
+                <div class="form-group">
+                    <label for="awsAccessKeyInput">AWS Access Key ID:</label>
+                    <input type="text" id="awsAccessKeyInput" placeholder="Enter your AWS Access Key ID...">
+                </div>
+                <div class="form-group">
+                    <label for="awsSecretKeyInput">AWS Secret Access Key:</label>
+                    <input type="password" id="awsSecretKeyInput" placeholder="Enter your AWS Secret Access Key...">
+                </div>
+                <div class="form-group">
+                    <label for="awsRegionInput">AWS Region:</label>
+                    <input type="text" id="awsRegionInput" placeholder="Enter AWS region (e.g., us-east-1)" value="us-east-1">
+                </div>
+                <div class="form-group">
+                    <label for="awsBucketInput">S3 Bucket Name:</label>
+                    <input type="text" id="awsBucketInput" placeholder="Enter your S3 bucket name...">
+                </div>
+                <button onclick="saveCredentials('aws')">Save AWS Credentials</button>
+                <div id="awsCredentialStatus" class="status-message"></div>
+            </div>
+
+            <div id="slackTab" class="tab-content">
+                <div class="form-group">
+                    <label for="slackBotTokenInput">Slack Bot Token:</label>
+                    <input type="password" id="slackBotTokenInput" placeholder="Enter your Slack Bot Token...">
+                    <small>This is required for Slack integration. You can create a bot token in the Slack API dashboard.</small>
+                </div>
+                <button onclick="saveCredentials('slack')">Save Slack Credentials</button>
+                <div id="slackCredentialStatus" class="status-message"></div>
+            </div>
+
+            <!-- <div id="apiKeysTab" class="tab-content">
+                <div class="form-group">
+                    <label for="apiKeyInput">API Key:</label>
+                    <input type="text" id="apiKeyInput" placeholder="Enter your API key...">
+                </div>
+                <div class="form-group">
+                    <label for="apiSecretInput">API Secret:</label>
+                    <input type="password" id="apiSecretInput" placeholder="Enter your API secret...">
+                </div>
+                <button onclick="saveCredentials('api')">Save API Credentials</button>
+                <div id="apiCredentialStatus" class="status-message"></div>
+            </div>
+
+            <div id="databaseTab" class="tab-content">
+                <div class="form-group">
+                    <label for="dbHostInput">Database Host:</label>
+                    <input type="text" id="dbHostInput" placeholder="Enter database host...">
+                </div>
+                <div class="form-group">
+                    <label for="dbUserInput">Database Username:</label>
+                    <input type="text" id="dbUserInput" placeholder="Enter database username...">
+                </div>
+                <div class="form-group">
+                    <label for="dbPasswordInput">Database Password:</label>
+                    <input type="password" id="dbPasswordInput" placeholder="Enter database password...">
+                </div>
+                <div class="form-group">
+                    <label for="dbNameInput">Database Name:</label>
+                    <input type="text" id="dbNameInput" placeholder="Enter database name...">
+                </div>
+                <button onclick="saveCredentials('db')">Save Database Credentials</button>
+                <div id="dbCredentialStatus" class="status-message"></div>
+            </div>
+        </div> -->
+
+        <div class="input-box">
+            <h3>Upload Text Files</h3>
+            <p>Upload one or more text files to process and add to the knowledge base.</p>
+
+            <div class="file-upload">
+                <input type="file" id="fileInput" accept=".txt" multiple>
+                <small>You can select multiple files by holding Ctrl (or Cmd on Mac) while selecting files.</small>
+            </div>
+
+            <button onclick="uploadFiles()">Process Files</button>
+
+            <div class="progress-container" id="fileProgressContainer">
+                <div class="progress-bar">
+                    <div class="progress" id="fileProgressBar"></div>
+                </div>
+                <div id="fileProgressText">0%</div>
+            </div>
+
+            <div id="fileStatusMessage" class="status-message"></div>
+            <div id="fileList" class="file-list"></div>
+        </div>
+
+        <div class="input-box">
+            <h3>Web Crawling</h3>
+            <p>Enter a URL to crawl its content:</p>
+            <input type="text" id="urlInput" placeholder="Enter website URL...">
+            <button onclick="startCrawling()">Start Crawl</button>
+
+            <div class="progress-container" id="urlProgressContainer">
+                <div class="progress-bar">
+                    <div class="progress" id="urlProgressBar"></div>
+                </div>
+                <div id="urlProgressText">0%</div>
+            </div>
+
+            <div id="urlStatusMessage" class="status-message"></div>
+        </div>
+
+        <!-- Google Drive Integration Section -->
+        <div class="input-box">
+            <h3>Google Drive Integration</h3>
+            <p>Fetch documents from your Google Drive:</p>
+
+            <div id="driveAuthStatus" class="status-message info" style="display: none;">
+                Checking authorization status...
+            </div>
+
+            <div id="driveUserInfo" style="display: none; margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <div style="display: flex; align-items: center;">
+                    <img id="userPicture" src="" alt="Profile" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px;">
+                    <div>
+                        <div id="userName" style="font-weight: bold;"></div>
+                        <div id="userEmail" style="font-size: 0.9em; color: #666;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="driveButtons">
+                <button id="authorizeButton" onclick="authorizeGoogleDrive()" style="background-color: #DB4437;">Connect to Google Drive</button>
+                <button id="disconnectButton" onclick="disconnectGoogleDrive()" style="background-color: #757575; display: none;">Disconnect from Google Drive</button>
+            </div>
+
+            <div id="driveFilesContainer" style="display: none; margin-top: 20px;">
+                <div class="file-filter">
+                    <label>Filter by type: </label>
+                    <select id="fileTypeFilter" onchange="loadDriveFiles()">
+                        <option value="all">All Files</option>
+                        <option value="txt">Text Files</option>
+                        <option value="pdf">PDF Files</option>
+                        <option value="docx">Word Documents</option>
+                    </select>
+
+                    <div style="margin-top: 10px;">
+                        <label>
+                            <input type="checkbox" id="globalSearchCheckbox" onchange="loadDriveFiles()">
+                            Search across all folders
+                        </label>
+                        <button onclick="loadDriveFiles()" style="background-color: #2196F3; margin-left: 10px;">Refresh Files</button>
+                    </div>
+                </div>
+
+                <div id="driveFilesList" style="margin-top: 15px; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+                    <p>Loading files...</p>
+                </div>
+
+                <div id="selectedFilesContainer" style="margin-top: 15px;">
+                    <h4>Selected Files (<span id="selectedCount">0</span>)</h4>
+                    <div id="selectedFilesList"></div>
+                </div>
+
+                <button onclick="fetchSelectedFiles()" style="margin-top: 15px;">Process Selected Files</button>
+            </div>
+
+            <div class="progress-container" id="driveProgressContainer">
+                <div class="progress-bar">
+                    <div class="progress" id="driveProgressBar"></div>
+                </div>
+                <div id="driveProgressText">0%</div>
+            </div>
+
+            <div id="driveStatusMessage" class="status-message"></div>
+        </div>
+
+        <!-- AWS S3 Integration Section -->
+        <div class="input-box">
+            <h3>AWS S3 Integration</h3>
+            <p>Fetch documents from your AWS S3 bucket:</p>
+            <p><small>Requires valid AWS S3 credentials to be saved above.</small></p>
+
+            <div class="checkbox-group" id="s3FileTypeCheckboxes">
+                <label><input type="checkbox" value="txt" checked> TXT</label>
+                <label><input type="checkbox" value="pdf"> PDF</label>
+                <label><input type="checkbox" value="docx"> DOCX</label>
+            </div>
+
+            <button onclick="fetchFromS3()">Fetch from S3</button>
+
+            <div class="progress-container" id="s3ProgressContainer">
+                <div class="progress-bar">
+                    <div class="progress" id="s3ProgressBar"></div>
+                </div>
+                <div id="s3ProgressText">0%</div>
+            </div>
+
+            <div id="s3StatusMessage" class="status-message"></div>
+        </div>
+
+        <!-- Slack Integration Section -->
+        <div class="input-box">
+            <h3>Slack Integration</h3>
+            <p>Fetch messages and files from your Slack workspace:</p>
+            <p><small>Requires valid Slack Bot Token to be saved above.</small></p>
+
+            <div class="form-group">
+                <label>Select Slack Sources:</label>
+                <div class="checkbox-group" id="slackSourcesCheckboxes">
+                    <label><input type="checkbox" value="public" checked> Public Channels</label>
+                    <label><input type="checkbox" value="private"> Private Channels</label>
+                    <label><input type="checkbox" value="dm"> Direct Messages</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Select Data Types:</label>
+                <div class="checkbox-group" id="slackDataTypesCheckboxes">
+                    <label><input type="checkbox" value="messages" checked> Messages</label>
+                    <label><input type="checkbox" value="files"> Files</label>
+                </div>
+            </div>
+
+            <button onclick="fetchFromSlack()">Fetch from Slack</button>
+
+            <div class="progress-container" id="slackProgressContainer">
+                <div class="progress-bar">
+                    <div class="progress" id="slackProgressBar"></div>
+                </div>
+                <div id="slackProgressText">0%</div>
+            </div>
+
+            <div id="slackStatusMessage" class="status-message"></div>
+        </div>
+    </div>
+
+    <script>
+        // Tab handling
+        function openTab(evt, tabName) {
+            // Hide all tab content
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].classList.remove("active");
+            }
+
+            // Remove "active" class from all tab buttons
+            tablinks = document.getElementsByClassName("tablink");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+
+            // Show the specific tab content and add "active" class to the button
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+
+        // Save credentials
+        async function saveCredentials(type) {
+            let credentials = {};
+            let statusElement;
+
+            if (type === 'google') {
+                const credentialJson = document.getElementById('credentialInput').value.trim();
+                if (!credentialJson) {
+                    showStatusMessage(document.getElementById('googleCredentialStatus'), 'Please enter credentials JSON', 'error');
+                    return;
+                }
+
+                try {
+                    // Validate JSON format
+                    credentials = JSON.parse(credentialJson);
+                    statusElement = document.getElementById('googleCredentialStatus');
+                } catch (e) {
+                    showStatusMessage(document.getElementById('googleCredentialStatus'), 'Invalid JSON format', 'error');
+                    return;
+                }
+            } else if (type === 'aws') {
+                const awsAccessKey = document.getElementById('awsAccessKeyInput').value.trim();
+                const awsSecretKey = document.getElementById('awsSecretKeyInput').value.trim();
+                const awsRegion = document.getElementById('awsRegionInput').value.trim();
+                const awsBucket = document.getElementById('awsBucketInput').value.trim();
+
+                if (!awsAccessKey || !awsSecretKey || !awsRegion || !awsBucket) {
+                    showStatusMessage(document.getElementById('awsCredentialStatus'), 'Please fill all AWS fields', 'error');
+                    return;
+                }
+
+                credentials = {
+                    awsAccessKey,
+                    awsSecretKey,
+                    awsRegion,
+                    awsBucket
+                };
+                statusElement = document.getElementById('awsCredentialStatus');
+            } else if (type === 'slack') {
+                const slackBotToken = document.getElementById('slackBotTokenInput').value.trim();
+
+                if (!slackBotToken) {
+                    showStatusMessage(document.getElementById('slackCredentialStatus'), 'Please enter your Slack Bot Token', 'error');
+                    return;
+                }
+
+                credentials = { slackBotToken };
+                statusElement = document.getElementById('slackCredentialStatus');
+            } else if (type === 'api') {
+                const apiKey = document.getElementById('apiKeyInput').value.trim();
+                const apiSecret = document.getElementById('apiSecretInput').value.trim();
+
+                if (!apiKey || !apiSecret) {
+                    showStatusMessage(document.getElementById('apiCredentialStatus'), 'Please enter both API key and secret', 'error');
+                    return;
+                }
+
+                credentials = { apiKey, apiSecret };
+                statusElement = document.getElementById('apiCredentialStatus');
+            } else if (type === 'db') {
+                const dbHost = document.getElementById('dbHostInput').value.trim();
+                const dbUser = document.getElementById('dbUserInput').value.trim();
+                const dbPassword = document.getElementById('dbPasswordInput').value.trim();
+                const dbName = document.getElementById('dbNameInput').value.trim();
+
+                if (!dbHost || !dbUser || !dbPassword || !dbName) {
+                    showStatusMessage(document.getElementById('dbCredentialStatus'), 'Please fill all database fields', 'error');
+                    return;
+                }
+
+                credentials = { dbHost, dbUser, dbPassword, dbName };
+                statusElement = document.getElementById('dbCredentialStatus');
+            }
+
+            try {
+                const response = await fetch('/save-credentials', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        credentialType: type,
+                        credentials: credentials
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatusMessage(statusElement, 'Credentials saved successfully!', 'success');
+
+                    // If Google credentials were saved, reload file types
+                    if (type === 'google') {
+                        loadDriveFileTypes();
+                    }
+                } else {
+                    showStatusMessage(statusElement, `Error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error("Error saving credentials:", error);
+                showStatusMessage(statusElement, `Error saving credentials: ${error.message}`, 'error');
+            }
+        }
+
+        // Load available file types
+        async function loadDriveFileTypes() {
+            try {
+                const response = await fetch('/get-drive-file-types');
+                if (response.ok) {
+                    const fileTypes = await response.json();
+                    populateFileTypeCheckboxes(fileTypes);
+                } else {
+                    console.error("Failed to load file types");
+                    document.getElementById('fileTypeCheckboxes').innerHTML =
+                        '<p class="error">Failed to load available file types. Please refresh the page.</p>';
+                }
+            } catch (error) {
+                console.error("Error loading file types:", error);
+                document.getElementById('fileTypeCheckboxes').innerHTML =
+                    '<p class="error">Error loading available file types. Please refresh the page.</p>';
+            }
+        }
+
+        // Google Drive Authorization
+        function authorizeGoogleDrive() {
+            const statusElement = document.getElementById('driveStatusMessage');
+
+            // Redirect to the server's authorization endpoint
+            window.location.href = '/authorize-google';
+
+            // Show status message
+            showStatusMessage(statusElement, 'Redirecting to Google authorization...', 'info');
+        }
+
+        // Handle OAuth callback
+        function handleOAuthCallback() {
+            // Check if we have a token in the URL hash
+            if (window.location.hash) {
+                const params = new URLSearchParams(window.location.hash.substring(1));
+                const accessToken = params.get('access_token');
+
+                if (accessToken) {
+                    // Create a credential object
+                    const credentials = {
+                        access_token: accessToken,
+                        token_type: params.get('token_type'),
+                        expires_in: params.get('expires_in')
+                    };
+
+                    // Save the credentials
+                    document.getElementById('credentialInput').value = JSON.stringify(credentials, null, 2);
+                    saveCredentials('google');
+                }
+            }
+        }
+
+        // Listen for messages from the OAuth callback window
+        window.addEventListener('message', function(event) {
+            // Verify the origin of the message
+            if (event.origin !== window.location.origin) {
+                return;
+            }
+
+            // Check if this is an OAuth callback message
+            if (event.data && event.data.type === 'oauth-success') {
+                // Refresh the Google Drive authorization status
+                checkDriveAuthStatus();
+            } else if (event.data && event.data.type === 'oauth-error') {
+                // Show the error message
+                const statusMessage = document.getElementById('driveStatusMessage');
+                showStatusMessage(statusMessage, `Authorization error: ${event.data.error}`, 'error');
+            }
+        });
+
+        // Document ready function
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check Google Drive authorization status
+            checkDriveAuthStatus();
+
+            // Load file types for the old interface (can be removed later)
+            loadDriveFileTypes();
+        });
+
+        // Populate file type checkboxes
+        function populateFileTypeCheckboxes(fileTypes) {
+            const container = document.getElementById('fileTypeCheckboxes');
+            container.innerHTML = '';
+
+            if (fileTypes && fileTypes.length > 0) {
+                fileTypes.forEach(type => {
+                    const label = document.createElement('label');
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = type;
+                    checkbox.id = `ft-${type}`;
+
+                    label.appendChild(checkbox);
+                    label.appendChild(document.createTextNode(type.toUpperCase()));
+                    container.appendChild(label);
+                });
+            } else {
+                container.innerHTML = '<p>No file types available</p>';
+            }
+        }
+
+        // Process multiple file uploads
+        async function uploadFiles() {
+            const fileInput = document.getElementById('fileInput');
+            const progressContainer = document.getElementById('fileProgressContainer');
+            const progressBar = document.getElementById('fileProgressBar');
+            const progressText = document.getElementById('fileProgressText');
+            const statusMessage = document.getElementById('fileStatusMessage');
+            const fileList = document.getElementById('fileList');
+
+            if (!fileInput.files.length) {
+                showStatusMessage(statusMessage, 'Please select at least one file to upload.', 'error');
+                return;
+            }
+
+            const files = fileInput.files;
+            const formData = new FormData();
+
+            // Add all files to the FormData
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            // Display the list of files being uploaded
+            fileList.innerHTML = '<p>Selected files:</p><ul>';
+            for (let i = 0; i < files.length; i++) {
+                fileList.innerHTML += `<li>${files[i].name} (${formatFileSize(files[i].size)})</li>`;
+            }
+            fileList.innerHTML += '</ul>';
+
+            // Reset and show progress
+            resetProgress(progressContainer, progressBar, progressText);
+            hideStatusMessage(statusMessage);
+
+            try {
+                const uploadResponse = await fetch('/upload-multiple', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (uploadResponse.ok) {
+                    // Start progress polling
+                    pollProgress(progressBar, progressText, statusMessage, 'file');
+                } else {
+                    const errorData = await uploadResponse.json();
+                    showStatusMessage(statusMessage, `Upload failed: ${errorData.error}`, 'error');
+                    hideProgress(progressContainer);
+                }
+            } catch (error) {
+                console.error("Upload error:", error);
+                showStatusMessage(statusMessage, `Error during upload: ${error.message}`, 'error');
+                hideProgress(progressContainer);
+            }
+        }
+
+        // Helper function to format file size
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        // Start website crawling
+        async function startCrawling() {
+            const urlInput = document.getElementById('urlInput');
+            const progressContainer = document.getElementById('urlProgressContainer');
+            const progressBar = document.getElementById('urlProgressBar');
+            const progressText = document.getElementById('urlProgressText');
+            const statusMessage = document.getElementById('urlStatusMessage');
+
+            const url = urlInput.value.trim();
+            if (!url) {
+                showStatusMessage(statusMessage, 'Please enter a URL to crawl.', 'error');
+                return;
+            }
+
+            // Reset and show progress
+            resetProgress(progressContainer, progressBar, progressText);
+            hideStatusMessage(statusMessage);
+
+            try {
+                const response = await fetch('/start-crawl', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (response.ok) {
+                    // Start progress polling
+                    pollProgress(progressBar, progressText, statusMessage, 'url');
+                } else {
+                    const errorData = await response.json();
+                    showStatusMessage(statusMessage, `Crawling failed: ${errorData.error}`, 'error');
+                    hideProgress(progressContainer);
+                }
+            } catch (error) {
+                console.error("Crawling error:", error);
+                showStatusMessage(statusMessage, `Error during crawling: ${error.message}`, 'error');
+                hideProgress(progressContainer);
+            }
+        }
+
+        // Global variable to store selected files
+        let selectedDriveFiles = [];
+
+        // Disconnect from Google Drive
+        async function disconnectGoogleDrive() {
+            const authStatus = document.getElementById('driveAuthStatus');
+            const userInfoContainer = document.getElementById('driveUserInfo');
+            const authorizeButton = document.getElementById('authorizeButton');
+            const disconnectButton = document.getElementById('disconnectButton');
+            const filesContainer = document.getElementById('driveFilesContainer');
+
+            try {
+                const response = await fetch('/disconnect-google', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                // Update UI
+                authStatus.textContent = 'Disconnected from Google Drive';
+                authStatus.className = 'status-message info';
+                userInfoContainer.style.display = 'none';
+                authorizeButton.style.display = 'inline-block';
+                authorizeButton.textContent = 'Connect to Google Drive';
+                disconnectButton.style.display = 'none';
+                filesContainer.style.display = 'none';
+
+                // Show status message
+                showStatusMessage(document.getElementById('driveStatusMessage'), data.message, data.status);
+
+            } catch (error) {
+                console.error("Error disconnecting from Google Drive:", error);
+                showStatusMessage(document.getElementById('driveStatusMessage'), `Error disconnecting: ${error.message}`, 'error');
+            }
+        }
+
+        // Get user info from Google Drive
+        async function getDriveUserInfo() {
+            try {
+                const response = await fetch('/get-drive-user-info');
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // Update user info display
+                    const userInfoContainer = document.getElementById('driveUserInfo');
+                    const userPicture = document.getElementById('userPicture');
+                    const userName = document.getElementById('userName');
+                    const userEmail = document.getElementById('userEmail');
+
+                    if (data.isConnected) {
+                        userPicture.src = data.picture || 'https://via.placeholder.com/40';
+                        userName.textContent = data.name;
+                        userEmail.textContent = data.email;
+                        userInfoContainer.style.display = 'block';
+
+                        // Show disconnect button
+                        document.getElementById('disconnectButton').style.display = 'inline-block';
+
+                        return true;
+                    } else {
+                        userInfoContainer.style.display = 'none';
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } catch (error) {
+                console.error("Error getting user info:", error);
+                return false;
+            }
+        }
+
+        // Check Google Drive authorization status
+        async function checkDriveAuthStatus() {
+            const authStatus = document.getElementById('driveAuthStatus');
+            const authorizeButton = document.getElementById('authorizeButton');
+            const disconnectButton = document.getElementById('disconnectButton');
+            const filesContainer = document.getElementById('driveFilesContainer');
+
+            authStatus.style.display = 'block';
+            authStatus.textContent = 'Checking authorization status...';
+            authStatus.className = 'status-message info';
+
+            try {
+                // First try to get user info
+                const userInfoSuccess = await getDriveUserInfo();
+
+                if (userInfoSuccess) {
+                    // User is authorized
+                    authStatus.textContent = 'Connected to Google Drive';
+                    authStatus.className = 'status-message success';
+                    authorizeButton.textContent = 'Reconnect to Google Drive';
+                    disconnectButton.style.display = 'inline-block';
+                    filesContainer.style.display = 'block';
+
+                    // Load the files
+                    loadDriveFiles();
+                } else {
+                    // Try the files endpoint as fallback
+                    const response = await fetch('/get-drive-files?type=all');
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        // User is authorized but we couldn't get user info
+                        authStatus.textContent = 'Connected to Google Drive';
+                        authStatus.className = 'status-message success';
+                        authorizeButton.textContent = 'Reconnect to Google Drive';
+                        disconnectButton.style.display = 'inline-block';
+                        filesContainer.style.display = 'block';
+
+                        // Load the files
+                        loadDriveFiles();
+                    } else {
+                        // User is not authorized
+                        authStatus.textContent = data.error || 'Not connected to Google Drive';
+                        authStatus.className = 'status-message error';
+                        authorizeButton.textContent = 'Connect to Google Drive';
+                        disconnectButton.style.display = 'none';
+                        filesContainer.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                authStatus.textContent = 'Error checking authorization status';
+                authStatus.className = 'status-message error';
+                disconnectButton.style.display = 'none';
+                filesContainer.style.display = 'none';
+            }
+        }
+
+        // Global variable to store current folder
+        let currentFolderId = 'root';
+
+        // MIME types for file filtering (should match the backend)
+        const MIME_TYPES = {
+            'txt': ['text/plain'],
+            'pdf': ['application/pdf'],
+            'docx': [
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.google-apps.document'
+            ],
+            'all': []
+        };
+
+        // Load files from Google Drive
+        async function loadDriveFiles(folderId = null) {
+            const filesList = document.getElementById('driveFilesList');
+            const fileTypeFilter = document.getElementById('fileTypeFilter');
+            const globalSearchCheckbox = document.getElementById('globalSearchCheckbox');
+            const fileType = fileTypeFilter.value;
+            const globalSearch = globalSearchCheckbox.checked;
+
+            // Update current folder if provided and not doing global search
+            if (folderId !== null && !globalSearch) {
+                currentFolderId = folderId;
+            }
+
+            // If global search is enabled, disable the breadcrumb navigation
+            if (globalSearch && folderId === null) {
+                // Don't update currentFolderId, we'll still keep track of it
+                // but the API call will ignore it
+            }
+
+            filesList.innerHTML = '<p>Loading files...</p>';
+
+            try {
+                const response = await fetch(`/get-drive-files?type=${fileType}&folder=${currentFolderId}&global=${globalSearch}`);
+                const data = await response.json();
+
+                if (response.ok && data.files) {
+                    // Create breadcrumb navigation
+                    let breadcrumbHtml = '<div class="breadcrumbs" style="margin-bottom: 10px; padding: 5px; background-color: #f5f5f5; border-radius: 4px;">';
+
+                    if (globalSearch) {
+                        // Show a special message for global search
+                        breadcrumbHtml += `<span style="font-weight: bold;">Global Search: ${formatMimeType(fileType === 'all' ? 'all' : MIME_TYPES[fileType][0])}</span>`;
+
+                        // Add a button to go back to normal folder view
+                        breadcrumbHtml += ` <button onclick="document.getElementById('globalSearchCheckbox').checked = false; loadDriveFiles('${currentFolderId}'); return false;" style="background-color: #2196F3; padding: 2px 5px; margin-left: 10px; font-size: 12px;">Return to Folder View</button>`;
+                    } else if (data.breadcrumbs && data.breadcrumbs.length > 0) {
+                        data.breadcrumbs.forEach((crumb, index) => {
+                            if (index > 0) {
+                                breadcrumbHtml += ' &gt; ';
+                            }
+                            breadcrumbHtml += `<a href="#" onclick="loadDriveFiles('${crumb.id}'); return false;" style="text-decoration: none; color: ${crumb.id === currentFolderId ? '#000' : '#2196F3'};">${crumb.name}</a>`;
+                        });
+                    }
+
+                    breadcrumbHtml += '</div>';
+
+                    if (data.files.length === 0) {
+                        filesList.innerHTML = breadcrumbHtml + '<p>No files found in this folder. Try a different filter or folder.</p>';
+                        return;
+                    }
+
+                    // Create a table to display the files
+                    let html = breadcrumbHtml + `
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Select</th>
+                                    <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Name</th>
+                                    <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    // Sort files to show folders first
+                    const sortedFiles = [...data.files].sort((a, b) => {
+                        // Folders first
+                        if (a.isFolder && !b.isFolder) return -1;
+                        if (!a.isFolder && b.isFolder) return 1;
+                        // Then alphabetically by name
+                        return a.name.localeCompare(b.name);
+                    });
+
+                    sortedFiles.forEach(file => {
+                        // Check if file is already selected
+                        const isSelected = selectedDriveFiles.some(f => f.id === file.id);
+                        const isFolder = file.isFolder || file.mimeType === 'application/vnd.google-apps.folder';
+
+                        html += `
+                            <tr>
+                                <td style="padding: 8px; border-bottom: 1px solid #ddd;">
+                                    ${isFolder ? '' : `<input type="checkbox" value="${file.id}" ${isSelected ? 'checked' : ''} onchange="toggleFileSelection(this, '${file.id}', '${file.name}', '${file.mimeType}')">`}
+                                </td>
+                                <td style="padding: 8px; border-bottom: 1px solid #ddd;">
+                                    ${isFolder ?
+                                        `<a href="#" onclick="loadDriveFiles('${file.id}'); return false;" style="text-decoration: none; color: #2196F3;">
+                                            <span style="margin-right: 5px;">📁</span>${file.name}
+                                        </a>` :
+                                        `<span style="margin-right: 5px;">${getFileIcon(file.mimeType)}</span>${file.name}`
+                                    }
+                                </td>
+                                <td style="padding: 8px; border-bottom: 1px solid #ddd;">
+                                    ${isFolder ? 'Folder' : formatMimeType(file.mimeType)}
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `
+                            </tbody>
+                        </table>
+                    `;
+
+                    filesList.innerHTML = html;
+
+                    // Update the selected files display
+                    updateSelectedFilesDisplay();
+                } else {
+                    filesList.innerHTML = `<p>Error loading files: ${data.error || 'Unknown error'}</p>`;
+                }
+            } catch (error) {
+                filesList.innerHTML = `<p>Error loading files: ${error.message}</p>`;
+            }
+        }
+
+        // Format MIME type for display
+        function formatMimeType(mimeType) {
+            const mimeMap = {
+                'text/plain': 'Text Files',
+                'application/pdf': 'PDF Documents',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word Documents',
+                'application/vnd.google-apps.document': 'Google Docs',
+                'application/vnd.google-apps.spreadsheet': 'Google Sheets',
+                'application/vnd.google-apps.presentation': 'Google Slides',
+                'application/vnd.google-apps.folder': 'Folder',
+                'all': 'All Files'
+            };
+
+            return mimeMap[mimeType] || mimeType;
+        }
+
+        // Get file icon based on MIME type
+        function getFileIcon(mimeType) {
+            const iconMap = {
+                'text/plain': '📄',
+                'application/pdf': '📑',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝',
+                'application/vnd.google-apps.document': '📝',
+                'application/vnd.google-apps.spreadsheet': '📊',
+                'application/vnd.google-apps.presentation': '📊',
+                'application/vnd.google-apps.folder': '📁'
+            };
+
+            return iconMap[mimeType] || '📄';
+        }
+
+        // Toggle file selection
+        function toggleFileSelection(checkbox, fileId, fileName, mimeType) {
+            if (checkbox.checked) {
+                // Add to selected files
+                selectedDriveFiles.push({
+                    id: fileId,
+                    name: fileName,
+                    mimeType: mimeType
+                });
+            } else {
+                // Remove from selected files
+                selectedDriveFiles = selectedDriveFiles.filter(file => file.id !== fileId);
+            }
+
+            // Update the selected files display
+            updateSelectedFilesDisplay();
+        }
+
+        // Update the selected files display
+        function updateSelectedFilesDisplay() {
+            const selectedCount = document.getElementById('selectedCount');
+            const selectedFilesList = document.getElementById('selectedFilesList');
+
+            selectedCount.textContent = selectedDriveFiles.length;
+
+            if (selectedDriveFiles.length > 0) {
+                let html = '<ul style="padding-left: 20px;">';
+                selectedDriveFiles.forEach(file => {
+                    html += `<li>${file.name} <button onclick="removeSelectedFile('${file.id}')" style="background-color: #f44336; padding: 2px 5px; margin-left: 5px;">Remove</button></li>`;
+                });
+                html += '</ul>';
+                selectedFilesList.innerHTML = html;
+            } else {
+                selectedFilesList.innerHTML = '<p>No files selected</p>';
+            }
+        }
+
+        // Remove a file from the selected files
+        function removeSelectedFile(fileId) {
+            selectedDriveFiles = selectedDriveFiles.filter(file => file.id !== fileId);
+
+            // Update the checkbox in the files list
+            const checkbox = document.querySelector(`input[type="checkbox"][value="${fileId}"]`);
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+
+            // Update the selected files display
+            updateSelectedFilesDisplay();
+        }
+
+        // Google Drive Authorization
+        function authorizeGoogleDrive() {
+            // Redirect to the server's authorization endpoint
+            window.location.href = '/authorize-google';
+        }
+
+        // Process selected files
+        async function fetchSelectedFiles() {
+            const progressContainer = document.getElementById('driveProgressContainer');
+            const progressBar = document.getElementById('driveProgressBar');
+            const progressText = document.getElementById('driveProgressText');
+            const statusMessage = document.getElementById('driveStatusMessage');
+
+            if (selectedDriveFiles.length === 0) {
+                showStatusMessage(statusMessage, 'Please select at least one file to process.', 'error');
+                return;
+            }
+
+            // Reset and show progress
+            resetProgress(progressContainer, progressBar, progressText);
+            hideStatusMessage(statusMessage);
+
+            try {
+                const response = await fetch('/fetch-from-drive', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        selectedFiles: selectedDriveFiles
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatusMessage(statusMessage, `Processing ${data.fileCount} files...`, 'info');
+
+                    // Start progress polling
+                    pollProgress(progressBar, progressText, statusMessage, 'drive');
+                } else {
+                    const errorData = await response.json();
+                    showStatusMessage(statusMessage, `Drive fetch failed: ${errorData.error}`, 'error');
+                    hideProgress(progressContainer);
+                }
+            } catch (error) {
+                console.error("Drive fetch error:", error);
+                showStatusMessage(statusMessage, `Error during Drive fetch: ${error.message}`, 'error');
+                hideProgress(progressContainer);
+            }
+        }
+
+        // Fetch from AWS S3
+        async function fetchFromS3() {
+            const progressContainer = document.getElementById('s3ProgressContainer');
+            const progressBar = document.getElementById('s3ProgressBar');
+            const progressText = document.getElementById('s3ProgressText');
+            const statusMessage = document.getElementById('s3StatusMessage');
+
+            // Get selected file types
+            const selectedTypes = [];
+            document.querySelectorAll('#s3FileTypeCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedTypes.push(checkbox.value);
+            });
+
+            if (selectedTypes.length === 0) {
+                showStatusMessage(statusMessage, 'Please select at least one file type.', 'error');
+                return;
+            }
+
+            // Reset and show progress
+            resetProgress(progressContainer, progressBar, progressText);
+            hideStatusMessage(statusMessage);
+
+            try {
+                const response = await fetch('/fetch-from-s3', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ fileTypes: selectedTypes })
+                });
+
+                if (response.ok) {
+                    // Start progress polling
+                    pollProgress(progressBar, progressText, statusMessage, 's3');
+                } else {
+                    const errorData = await response.json();
+                    showStatusMessage(statusMessage, `S3 fetch failed: ${errorData.error}`, 'error');
+                    hideProgress(progressContainer);
+                }
+            } catch (error) {
+                console.error("S3 fetch error:", error);
+                showStatusMessage(statusMessage, `Error during S3 fetch: ${error.message}`, 'error');
+                hideProgress(progressContainer);
+            }
+        }
+
+        // Fetch from Slack
+        async function fetchFromSlack() {
+            const progressContainer = document.getElementById('slackProgressContainer');
+            const progressBar = document.getElementById('slackProgressBar');
+            const progressText = document.getElementById('slackProgressText');
+            const statusMessage = document.getElementById('slackStatusMessage');
+
+            // Get selected sources
+            const selectedSources = [];
+            document.querySelectorAll('#slackSourcesCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedSources.push(checkbox.value);
+            });
+
+            // Get selected data types
+            const selectedDataTypes = [];
+            document.querySelectorAll('#slackDataTypesCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedDataTypes.push(checkbox.value);
+            });
+
+            if (selectedSources.length === 0) {
+                showStatusMessage(statusMessage, 'Please select at least one Slack source.', 'error');
+                return;
+            }
+
+            if (selectedDataTypes.length === 0) {
+                showStatusMessage(statusMessage, 'Please select at least one data type.', 'error');
+                return;
+            }
+
+            // Reset and show progress
+            resetProgress(progressContainer, progressBar, progressText);
+            hideStatusMessage(statusMessage);
+
+            try {
+                const response = await fetch('/fetch-from-slack', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sources: selectedSources,
+                        dataTypes: selectedDataTypes
+                    })
+                });
+
+                if (response.ok) {
+                    // Start progress polling
+                    pollProgress(progressBar, progressText, statusMessage, 'slack');
+                } else {
+                    const errorData = await response.json();
+                    showStatusMessage(statusMessage, `Slack fetch failed: ${errorData.error}`, 'error');
+                    hideProgress(progressContainer);
+                }
+            } catch (error) {
+                console.error("Slack fetch error:", error);
+                showStatusMessage(statusMessage, `Error during Slack fetch: ${error.message}`, 'error');
+                hideProgress(progressContainer);
+            }
+        }
+
+        // Poll progress endpoint to update UI
+        async function pollProgress(progressBar, progressText, statusMessage, type) {
+            const progressContainer = document.getElementById(`${type}ProgressContainer`);
+            const fileList = document.getElementById('fileList');
+
+            // Show progress container
+            progressContainer.style.display = 'block';
+
+            // Start polling
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/progress');
+                    const data = await response.json();
+
+                    // Update progress
+                    const progress = data.progress || 0;
+                    progressBar.style.width = `${progress}%`;
+                    progressText.innerText = `${progress}%`;
+
+                    // For multiple file processing, show additional info
+                    if (data.total_files && data.processed_files !== undefined) {
+                        const filesInfo = document.createElement('div');
+                        filesInfo.className = 'files-info';
+                        filesInfo.innerHTML = `Processing file ${data.processed_files} of ${data.total_files}`;
+
+                        // If there's a current file being processed, show it
+                        if (data.current_file) {
+                            filesInfo.innerHTML += `<br>Current file: ${data.current_file}`;
+                        }
+
+                        // Update status message with file info
+                        if (data.status && data.status.startsWith('processing_file_')) {
+                            showStatusMessage(statusMessage, filesInfo.innerHTML, 'info');
+                        } else if (data.status === 'combining_files') {
+                            showStatusMessage(statusMessage, 'Combining processed files...', 'info');
+                        } else if (data.status === 'loading_knowledge') {
+                            showStatusMessage(statusMessage, 'Loading data into knowledge system...', 'info');
+                        }
+                    }
+
+                    // Check if complete or error
+                    if (data.status === 'complete') {
+                        clearInterval(pollInterval);
+                        if (data.total_files) {
+                            showStatusMessage(statusMessage, `All ${data.total_files} files processed successfully!`, 'success');
+                        } else {
+                            showStatusMessage(statusMessage, 'Processing completed successfully!', 'success');
+                        }
+                        // Keep the progress bar at 100%
+                    } else if (data.status === 'error') {
+                        clearInterval(pollInterval);
+                        showStatusMessage(statusMessage, `Error: ${data.error || 'Unknown error'}`, 'error');
+                    }
+
+                } catch (error) {
+                    console.error("Progress polling error:", error);
+                    clearInterval(pollInterval);
+                    showStatusMessage(statusMessage, `Error checking progress: ${error.message}`, 'error');
+                }
+            }, 1000);
+        }
+
+        // Helper functions for UI handling
+        function resetProgress(container, bar, text) {
+            container.style.display = 'block';
+            bar.style.width = '0%';
+            text.innerText = '0%';
+        }
+
+        function hideProgress(container) {
+            container.style.display = 'none';
+        }
+
+        function showStatusMessage(element, message, type) {
+            element.textContent = message;
+            element.className = `status-message ${type}`;
+            element.style.display = 'block';
+        }
+
+        function hideStatusMessage(element) {
+            element.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

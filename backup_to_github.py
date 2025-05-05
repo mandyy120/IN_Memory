@@ -26,9 +26,14 @@ IMPORTANT_FILES = [
     "text.py",
     "Gdrive.py",
     "crawling.py",
-    "crawling2.py",
     "slack_integration.py",
     "setup_project.py",
+    "file_lock.py",
+    "streaming_worker.py",
+    "message_broker.py",
+    "start_streaming_workers.py",
+    "reset_system.py",
+    
 
     # Utility Python files
     "fix_repository_hash.py",
