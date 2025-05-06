@@ -61,6 +61,7 @@ IMPORTANT_FILES = [
 
     # Shell scripts
     "start_app.sh",
+    "setup.sh",
     "README.md",
 
     # Environment files (without sensitive data)
